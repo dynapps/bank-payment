@@ -24,21 +24,14 @@
 #
 ##############################################################################
 
-from openerp import api, models
+from odoo import fields, models
 
 
-class payment_order_create(models.TransientModel):
-    _inherit = 'payment.order.create'
+class AccountPaymentMethod(models.Model):
+    _inherit = "account.payment.mode"
 
-    @api.multi
-    def extend_payment_order_domain(self, payment_order, domain):
-        super(payment_order_create, self).extend_payment_order_domain(
-            payment_order, domain)
-        # apply payment term filter
-        if payment_order.mode.payment_term_ids:
-            domain += [
-                ('invoice.payment_term', 'in',
-                 [term.id for term in payment_order.mode.payment_term_ids]
-                 )
-                ]
-        return True
+    payment_term_ids = fields.Many2many(
+        'account.payment.term', string= 'Payment terms',
+        help=('Limit selected invoices to invoices with these payment '
+              'terms')
+    )

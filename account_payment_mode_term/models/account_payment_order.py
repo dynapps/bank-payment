@@ -24,17 +24,19 @@
 #
 ##############################################################################
 
-from openerp.osv import orm, fields
+from odoo import api, models
 
 
-class payment_mode(orm.Model):
-    _inherit = "payment.mode"
+class AccountPaymentLineCreate(models.TransientModel):
+    _inherit = 'account.payment.line.create'
 
-    _columns = {
-        'payment_term_ids': fields.many2many(
-            'account.payment.term', 'account_payment_order_terms_rel',
-            'mode_id', 'term_id', 'Payment terms',
-            help=('Limit selected invoices to invoices with these payment '
-                  'terms')
-            ),
-        }
+    @api.multi
+    def _prepare_move_line_domain(self):
+        domain = super(AccountPaymentLineCreate, self)._prepare_move_line_domain()
+        if self.order_id.payment_mode_id.payment_term_ids:
+            domain += [
+                        ('invoice_id.payment_term_id', 'in',
+                         [term.id for term in self.order_id.payment_mode_id.payment_term_ids]
+                         )
+                        ]
+        return domain

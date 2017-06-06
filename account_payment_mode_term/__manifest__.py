@@ -26,17 +26,18 @@
 
 {
     'name': 'Account Banking - Payments Term Filter',
-    'version': '8.0.0.1.2',
+    'version': '1.0',
     'license': 'AGPL-3',
     'author': "Banking addons community,Odoo Community Association (OCA)",
     'website': 'https://github.com/OCA/banking',
     'category': 'Banking addons',
     'depends': [
-        'account_banking_payment_export',
+        'account_payment_order',
     ],
     'data': [
-        'views/payment_mode.xml',
+        'views/account_payment_mode_view.xml',
+        'views/account_payment_order_view.xml',
     ],
     'auto_install': False,
-    'installable': False,
+    'installable': True,
 }
