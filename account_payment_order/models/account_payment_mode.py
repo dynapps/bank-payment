@@ -40,6 +40,12 @@ class AccountPaymentMode(models.Model):
         ('due', 'Due'),
         ('move', 'Move'),
         ], default='due', string="Type of Date Filter")
+    # default option for account.payment.order
+    default_date_prefered = fields.Selection([
+        ('now', 'Immediately'),
+        ('due', 'Due Date'),
+        ('fixed', 'Fixed Date'),
+        ], string='Default Payment Execution Date')
     group_lines = fields.Boolean(
         string="Group Transactions in Payment Orders", default=True,
         help="If this mark is checked, the transaction lines of the "
@@ -111,10 +117,14 @@ class AccountPaymentMode(models.Model):
             aj_ids = []
             if self.payment_method_id.payment_type == 'outbound':
                 aj_ids = ajo.search([
-                    ('type', 'in', ('purchase_refund', 'purchase'))]).ids
+                    ('type', 'in', ('purchase_refund', 'purchase')),
+                    ('company_id', '=', self.company_id.id)
+                ]).ids
             elif self.payment_method_id.payment_type == 'inbound':
                 aj_ids = ajo.search([
-                    ('type', 'in', ('sale_refund', 'sale'))]).ids
+                    ('type', 'in', ('sale_refund', 'sale')),
+                    ('company_id', '=', self.company_id.id)
+                ]).ids
             self.default_journal_ids = [(6, 0, aj_ids)]
 
     @api.onchange('generate_move')

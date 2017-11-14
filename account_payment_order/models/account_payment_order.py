@@ -86,11 +86,21 @@ class AccountPaymentOrder(models.Model):
         compute='_compute_total', store=True, readonly=True,
         currency_field='company_currency_id')
     bank_line_count = fields.Integer(
-        compute='_bank_line_count', string='Number of Bank Lines',
+        compute='_compute_bank_line_count', string='Number of Bank Lines',
         readonly=True)
     move_ids = fields.One2many(
         'account.move', 'payment_order_id', string='Journal Entries',
         readonly=True)
+    description = fields.Char()
+
+    @api.multi
+    def unlink(self):
+        for order in self:
+            if order.state == 'uploaded':
+                raise UserError(_(
+                    "You cannot delete an uploaded payment order. You can "
+                    "cancel it in order to do so."))
+        return super(AccountPaymentOrder, self).unlink()
 
     @api.multi
     @api.constrains('payment_type', 'payment_mode_id')
@@ -117,16 +127,18 @@ class AccountPaymentOrder(models.Model):
                         "is in the past (%s).")
                         % (order.name, order.date_scheduled))
 
-    @api.one
+    @api.multi
     @api.depends(
         'payment_line_ids', 'payment_line_ids.amount_company_currency')
     def _compute_total(self):
-        self.total_company_currency = sum(
-            self.mapped('payment_line_ids.amount_company_currency') or [0.0])
+        for rec in self:
+            rec.total_company_currency = sum(
+                rec.mapped('payment_line_ids.amount_company_currency') or
+                [0.0])
 
     @api.multi
     @api.depends('bank_line_ids')
-    def _bank_line_count(self):
+    def _compute_bank_line_count(self):
         for order in self:
             order.bank_line_count = len(order.bank_line_ids)
 
@@ -141,6 +153,10 @@ class AccountPaymentOrder(models.Model):
             vals['payment_type'] = payment_mode.payment_type
             if payment_mode.bank_account_link == 'fixed':
                 vals['journal_id'] = payment_mode.fixed_journal_id.id
+            if (
+                    not vals.get('date_prefered') and
+                    payment_mode.default_date_prefered):
+                vals['date_prefered'] = payment_mode.default_date_prefered
         return super(AccountPaymentOrder, self).create(vals)
 
     @api.onchange('payment_mode_id')
@@ -157,6 +173,8 @@ class AccountPaymentOrder(models.Model):
                 jrl_ids = self.payment_mode_id.variable_journal_ids.ids
                 res['domain']['journal_id'] = "[('id', 'in', %s)]" % jrl_ids
         self.journal_id = journal_id
+        if self.payment_mode_id.default_date_prefered:
+            self.date_prefered = self.payment_mode_id.default_date_prefered
         return res
 
     @api.multi
@@ -165,6 +183,16 @@ class AccountPaymentOrder(models.Model):
             'date_done': fields.Date.context_today(self),
             'state': 'done',
             })
+        return True
+
+    @api.multi
+    def action_done_cancel(self):
+        for move in self.move_ids:
+            move.button_cancel()
+            for move_line in move.line_ids:
+                move_line.remove_move_reconcile()
+            move.unlink()
+        self.action_cancel()
         return True
 
     @api.multi
@@ -202,6 +230,12 @@ class AccountPaymentOrder(models.Model):
             if not order.journal_id:
                 raise UserError(_(
                     'Missing Bank Journal on payment order %s.') % order.name)
+            if (
+                    order.payment_method_id.bank_account_required and
+                    not order.journal_id.bank_account_id):
+                raise UserError(_(
+                    "Missing bank account on bank journal '%s'.")
+                    % order.journal_id.display_name)
             if not order.payment_line_ids:
                 raise UserError(_(
                     'There are no transactions on payment order %s.')
